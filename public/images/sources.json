@@ -1,0 +1,80 @@
+[
+  {
+    "file": "hero-sahara.jpg",
+    "source": "https://images.unsplash.com/photo-1473580044384-7ba9967e16a0",
+    "description": "Wide golden sand dunes with low sun, atmospheric and cinematic",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "hero-dunes.jpg",
+    "source": "https://images.unsplash.com/photo-1509316785289-025f5b846b35",
+    "description": "Wide red Monument Valley cliffs, desert, cyan sky",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "cinematic-car.jpg",
+    "source": "https://images.unsplash.com/photo-1503376780353-7e6692767b70",
+    "description": "Black Porsche driving on a road, low rear angle and motion",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "fashion-portrait.jpg",
+    "source": "https://images.unsplash.com/photo-1534528741775-53994a69daeb",
+    "description": "Female portrait with blue and purple studio lighting",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "portrait-editorial.jpg",
+    "source": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1",
+    "description": "Fashion portrait in black clothing against a dark background",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "mountain-world.jpg",
+    "source": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+    "description": "Spectacular alpine mountain valley",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "perfume-product.jpg",
+    "source": "https://images.unsplash.com/photo-1541643600914-78b084683601",
+    "description": "Chanel perfume bottle against pale blue",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "urban-night.jpg",
+    "source": "https://images.unsplash.com/photo-1519608487953-e999c86e7455",
+    "description": "Empty atmospheric urban street with blue and purple neon lighting",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "ocean-adventure.jpg",
+    "source": "https://images.unsplash.com/photo-1502680390469-be75c86b636f",
+    "description": "Surfer inside an aqua wave",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "underwater-world.jpg",
+    "source": "https://images.unsplash.com/photo-1535591273668-578e31182c4f",
+    "description": "Clownfish in colorful underwater environment",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "cosmic-night.jpg",
+    "source": "https://images.unsplash.com/photo-1462331940025-496dfbfc7564",
+    "description": "Colorful cosmic nebula",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "forest-light.jpg",
+    "source": "https://images.unsplash.com/photo-1448375240586-882707db888b",
+    "description": "Atmospheric green forest with mist and sunbeams",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "scenic-road.jpg",
+    "source": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee",
+    "description": "Road extending between orange rocky hills",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  }
+]

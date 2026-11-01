@@ -1,0 +1,10 @@
+{
+  "provider": "Google Fonts",
+  "license": "SIL Open Font License 1.1",
+  "files": {
+    "dm-sans-latin-ext.woff2": "https://fonts.gstatic.com/s/dmsans/v17/rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu6-K6h9Q.woff2",
+    "dm-sans-latin.woff2": "https://fonts.gstatic.com/s/dmsans/v17/rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2",
+    "manrope-latin-ext.woff2": "https://fonts.gstatic.com/s/manrope/v23/xn7gYHE41ni1AdIRggmxSuXd.woff2",
+    "manrope-latin.woff2": "https://fonts.gstatic.com/s/manrope/v23/xn7gYHE41ni1AdIRggexSg.woff2"
+  }
+}

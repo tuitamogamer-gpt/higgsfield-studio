@@ -1,0 +1,224 @@
+.command-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  background: #030606b8;
+  backdrop-filter: blur(12px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 15vh 20px 30px;
+}
+.command-dialog {
+  width: 620px;
+  max-width: 100%;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  background: #151a17;
+  border: 1px solid #45503b;
+  border-radius: 15px;
+  box-shadow: 0 30px 120px #0009;
+  overflow: hidden;
+}
+.command-search {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 22px;
+  border-bottom: 1px solid #313a2d;
+  color: #c4d4b2;
+  flex-shrink: 0;
+}
+.command-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: none;
+  outline: none;
+  font-size: 16px;
+  color: #edf5e7;
+  padding: 2px 0;
+}
+.command-search input::placeholder {
+  color: #83917c;
+}
+.command-search button {
+  display: flex;
+  padding: 5px;
+  color: #98a58f;
+  border-radius: 5px;
+}
+.command-search button:hover {
+  background: #303b28;
+  color: #e1f5cb;
+}
+.command-results {
+  padding: 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  min-height: 150px;
+}
+.command-group {
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: #839478;
+  padding: 13px 12px 9px;
+}
+.command-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #c3ceba;
+}
+.command-option.selected {
+  background: #283321;
+  border-color: #405134;
+  color: #ecf7e0;
+}
+.command-icon {
+  width: 37px;
+  height: 37px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #222a1e;
+  color: #adc39b;
+  flex-shrink: 0;
+  border: 1px solid #37432f;
+}
+.command-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.command-option.selected .command-icon {
+  background: #3d4c2d;
+  color: #d4f6aa;
+  border-color: #536b3a;
+}
+.command-option > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+.command-option strong {
+  font-size: 13px;
+  font-weight: 550;
+  display: block;
+  line-height: 1.5;
+}
+.command-option small {
+  font-size: 10px;
+  display: block;
+  color: #91a085;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.command-option > svg {
+  opacity: 0.65;
+}
+.command-footer {
+  border-top: 1px solid #303a29;
+  padding: 13px 20px;
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  color: #91a084;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+.command-footer > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.command-footer kbd {
+  padding: 2px 4px;
+  background: #242d1e;
+  border: 1px solid #3c4931;
+  border-radius: 4px;
+  min-width: 16px;
+  text-align: center;
+  font-family: inherit;
+  font-size: 8px;
+  color: #c0d3af;
+  display: flex;
+  justify-content: center;
+}
+.command-count {
+  margin-left: auto;
+  color: #6f8063;
+  font-size: 8px;
+}
+.command-empty {
+  min-height: 210px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 17px;
+  text-align: center;
+  color: #a9c08e;
+  padding: 25px;
+}
+.command-empty strong {
+  font-size: 15px;
+  color: #d2dec6;
+  font-weight: 500;
+}
+.command-empty p {
+  font-size: 11px;
+  color: #8e9d81;
+}
+@media (max-width: 640px) {
+  .command-backdrop {
+    padding: 82px 12px 20px;
+  }
+  .command-dialog {
+    max-height: calc(100dvh - 110px);
+    border-radius: 12px;
+  }
+  .command-search {
+    padding: 17px 14px;
+    gap: 10px;
+  }
+  .command-search input {
+    font-size: 13px;
+  }
+  .command-search > svg {
+    width: 18px;
+  }
+  .command-results {
+    padding: 8px;
+  }
+  .command-option {
+    gap: 11px;
+    padding: 11px 9px;
+  }
+  .command-option strong {
+    font-size: 12px;
+  }
+  .command-option small {
+    font-size: 9px;
+  }
+  .command-footer {
+    gap: 11px;
+    padding: 12px;
+    font-size: 8px;
+  }
+  .command-count {
+    display: none;
+  }
+  .command-group {
+    font-size: 8px;
+  }
+}

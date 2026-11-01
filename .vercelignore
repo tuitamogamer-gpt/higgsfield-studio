@@ -1,0 +1,9 @@
+.git/
+.vercel/
+node_modules/
+dist/
+scratch/
+library-files/
+shared/
+.env*
+*.tsbuildinfo

@@ -1,0 +1,250 @@
+.connection-banner {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 16px 18px;
+  margin-bottom: 23px;
+  background: #292519;
+  border: 1px solid #5c5030;
+  border-radius: 10px;
+  color: #dbcc96;
+}
+.connection-banner-icon {
+  width: 35px;
+  height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: #3c3420;
+  flex-shrink: 0;
+}
+.connection-banner > div {
+  flex: 1;
+  min-width: 0;
+}
+.connection-banner strong {
+  font-size: 12px;
+  font-weight: 550;
+  color: #eadfbc;
+}
+.connection-banner p {
+  font-size: 10px;
+  line-height: 1.8;
+  color: #b6a87b;
+  margin-top: 4px;
+}
+.connection-banner > button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border: 1px solid #6a5e38;
+  border-radius: 6px;
+  color: #e2d4a4;
+  background: #3c3421;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.connection-banner > button:hover {
+  background: #51452b;
+}
+.api-button.connection-warning {
+  border-color: #6b5e37;
+  background: #302a1a;
+  color: #ddcc91;
+}
+.api-button:disabled {
+  opacity: 0.7;
+}
+.connection-modal-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #322b1d;
+  border: 1px solid #615135;
+  border-radius: 7px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #d9c59e;
+  margin-bottom: 18px;
+}
+.connection-modal-note > span {
+  flex: 1;
+}
+.connection-modal-note button {
+  text-decoration: underline;
+  font-size: 10px;
+  color: #efdbb6;
+}
+.activity-strip {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  border: 1px solid #35422e;
+  background: linear-gradient(90deg, #1d2718, #131a11);
+  padding: 15px 18px;
+  border-radius: 10px;
+  margin-bottom: 19px;
+}
+.activity-symbol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: #303e23;
+  color: #c5dda7;
+}
+.activity-strip > div {
+  display: flex;
+  gap: 6px;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.activity-strip strong {
+  font-size: 12px;
+  font-weight: 550;
+  color: #dbe9cd;
+}
+.activity-strip > div > span {
+  font-size: 10px;
+  color: #9bad8d;
+  line-height: 1.6;
+}
+.activity-strip > button {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  color: #c5dcae;
+  padding: 8px;
+}
+.activity-strip > button:hover {
+  color: #e6ffcc;
+}
+.toast-info {
+  background: #302b1d;
+  border-color: #605033;
+  color: #e4d4ad;
+}
+.toast-error {
+  background: #3b2522;
+  border-color: #764d43;
+  color: #f2c2b7;
+}
+.toast {
+  line-height: 1.6;
+}
+.toast .icon-button {
+  flex-shrink: 0;
+}
+.command-search input:focus {
+  outline: 0;
+}
+.command-search:focus-within {
+  border-bottom-color: #647f45;
+}
+.app-recovery {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 30px;
+  text-align: center;
+  background: radial-gradient(ellipse at 50% 40%, #202b17, #0c100b 65%);
+}
+.app-recovery-symbol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 73px;
+  height: 73px;
+  background: #2c3a20;
+  border: 1px solid #4c6335;
+  border-radius: 19px;
+  color: #c6e7a0;
+  margin-bottom: 31px;
+}
+.app-recovery h1 {
+  font-size: 34px;
+}
+.app-recovery p {
+  font-size: 13px;
+  color: #a1af95;
+  line-height: 1.9;
+  max-width: 540px;
+  margin: 19px 0 28px;
+}
+.app-recovery .primary-button {
+  gap: 11px;
+}
+.app-recovery .text-button {
+  margin-top: 18px;
+  font-size: 11px;
+  color: #a5b498;
+}
+@media (max-width: 640px) {
+  .connection-banner {
+    padding: 13px;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .connection-banner > div {
+    min-width: 200px;
+  }
+  .connection-banner-icon {
+    width: 30px;
+    height: 31px;
+  }
+  .connection-banner strong {
+    font-size: 11px;
+  }
+  .connection-banner p {
+    font-size: 10px;
+  }
+  .connection-banner > button {
+    margin-left: 40px;
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+  .activity-strip {
+    padding: 13px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .activity-symbol {
+    width: 31px;
+    height: 33px;
+  }
+  .activity-strip strong {
+    font-size: 11px;
+  }
+  .activity-strip > div > span {
+    font-size: 9px;
+  }
+  .activity-strip > button {
+    margin-left: 35px;
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+  .app-recovery {
+    padding: 25px;
+  }
+  .app-recovery h1 {
+    font-size: 27px;
+  }
+  .app-recovery p {
+    font-size: 12px;
+  }
+  .app-recovery .primary-button {
+    font-size: 11px;
+  }
+}
