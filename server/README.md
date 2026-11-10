@@ -12,11 +12,11 @@ Read on 2026-11-01:
 - [Pika 2.5 text-to-video specification](https://dev.pika.art/llms/pika/pika-2.5/text-to-video)
 - [Expanded live Pika 2.5 input schema](https://api.dev.pika.art/catalog/apis/pika/pika-2.5/text-to-video?expand=inputs)
 
-Model parameters and prices are fetched at runtime. The studio exposes asynchronous media models; synchronous LLM and decision APIs have separate contracts and are excluded. Every generation is a real, potentially billable request. Quotes and account balance reads are free. A valid API Club key, active account, and enough available credit are needed to generate.
+Model parameters and prices are fetched at runtime. The studio exposes asynchronous media models; synchronous LLM and decision APIs have separate contracts and are excluded, including `llm`/`decision` catalog entries that use a `/v1/media/` path (for example a prompt rewriter that returns text). Catalog entries keep the provider's `display_pricing`, which the UI shows as a "starting at" price. Every generation is a real, potentially billable request. Quotes and account balance reads are free. A valid API Club key, active account, and enough available credit are needed to generate.
 
 ## Frontend contract
 
-All routes return JSON. Errors return `{ message, code?, job? }`. Keep a returned `job.id`, including failed job envelopes. A network failure after submitting is an uncertain outcome, not proof that the generation did not start.
+All routes return JSON. Errors return `{ message, code?, job? }`. Messages are Croatian because the UI shows them directly; provider validation errors keep the provider's detail after a Croatian prefix (`Pika je odbio zahtjev: …`), with the API key redacted. Keep a returned `job.id`, including failed job envelopes. A network failure after submitting is an uncertain outcome, not proof that the generation did not start.
 
 | Route | Input | Output |
 | --- | --- | --- |
@@ -43,7 +43,7 @@ Direct browser uploads require the provider's storage to permit the app origin i
 ## Running and deployment
 
 - `npm run dev`: API on port 3001 and Vite on 5173, proxied under one browser origin.
-- `npm run build && npm start`: Express serves `dist/` and `/api` together. `PORT` or `API_PORT` overrides port 3001.
+- `npm run build && npm start`: Express serves `dist/` and `/api` together. `PORT` or `API_PORT` overrides port 3001. Fingerprinted `/assets` files are cached for a year, `index.html` is revalidated on every load, and a missing asset returns 404. Every response carries the same security headers (CSP, frame, referrer, and permissions policies) that `vercel.json` sets on Vercel.
 - `npm test`: mocked HTTP integration tests; no paid generations.
 - Production startup requires a server-only `SESSION_SECRET` containing 64 hexadecimal characters from 32 cryptographically random bytes. Configure the same value for all replicas of a deployment; never prefix it with `VITE_` or commit it. Rotating it signs out existing sessions. Development uses a process-local random secret when no value is configured.
 - If deploying behind a reverse proxy, use HTTPS and preserve the public `Host`, or set `APP_ORIGIN` to the public application origin. Express trusts one proxy hop for its secure cookie detection.
@@ -57,6 +57,6 @@ The server checks current catalog membership, quotes/validates input with the pr
 
 ## Validation
 
-Tests cover key validation/redaction, encrypted sessions across fresh instances, tamper/expiry rejection, production secret requirements, secure cookie behavior, disconnect, origin checks, path rejection, dynamic catalog filtering, keyless quotes, generation authorization, price/balance gates, request replay, uncertain-response recovery, failed job IDs, signed file uploads, direct-upload preparation/size validation, unsafe storage destinations/headers, and rejecting unauthenticated uploads before buffering.
+Tests cover key validation/redaction, encrypted sessions across fresh instances, tamper/expiry rejection, production secret requirements, secure cookie behavior, disconnect, origin checks, path rejection, dynamic catalog filtering, keyless quotes, generation authorization, price/balance gates, request replay, uncertain-response recovery, failed job IDs, signed file uploads, direct-upload preparation/size validation, unsafe storage destinations/headers, rejecting unauthenticated uploads before buffering, excluding text/decision operations from the catalog, Croatian provider error messages, security headers, static caching, and parity between the Express and Vercel headers.
 
 Public catalog connectivity was verified against the real provider (151 asynchronous media operations at implementation time). Authenticated generation cannot be verified without the user's key; the integration tests mock the official response contracts rather than claiming to have generated real media.

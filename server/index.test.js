@@ -130,6 +130,42 @@ test('failed upstream jobs retain recovery ID and actionable error', async t => 
   assert.equal(r.status, 422);
   assert.equal(r.data.code, 'content_moderation');
   assert.equal(r.data.job.id, 'media_test');
+  assert.equal(r.data.message, 'Pika je odbio zahtjev: Prompt could not be processed.');
+});
+
+test('text and decision operations stay out of the media studio catalog', async t => {
+  const rewriter = { api_id: 'pika/pika-h3-flex/prompt-rewriter', category: 'llm', name: 'Prompt Rewriter', call: { method: 'POST', path: '/v1/media/pika/pika-h3-flex/prompt-rewriter' } };
+  const decision = { api_id: 'vendor/model/decide', category: 'decision', name: 'Decision', call: { method: 'POST', path: '/v1/media/vendor/model/decide' } };
+  const { request, calls } = await setup(t, url => new URL(url).pathname === '/catalog/apis' ? response({ apis: [OP, rewriter, decision] }) : null);
+  assert.deepEqual((await request('/api/catalog')).data.apis.map(entry => entry.api_id), [API_ID]);
+  const detail = await request(`/api/catalog/detail?apiId=${rewriter.api_id}`);
+  assert.equal(detail.status, 404);
+  assert.equal(calls.some(call => call.url.includes('prompt-rewriter')), false);
+});
+
+test('provider failures become Croatian messages without leaking the key', async t => {
+  const { request, connect } = await setup(t, url => {
+    const pathname = new URL(url).pathname;
+    if (pathname.endsWith('/quote')) return response({ detail: [{ loc: ['body', 'duration_s'], msg: `must be at most 10 (${KEY})` }] }, 422);
+    if (pathname === '/v1/media/jobs/media_test') return response({ error: { message: 'Internal' } }, 503);
+    return null;
+  });
+  await connect();
+  const quote = await request('/api/quote', { apiId: API_ID, input: { prompt: 'x', duration_s: 30 } });
+  assert.equal(quote.status, 422);
+  assert.equal(quote.data.message, 'Pika je odbio zahtjev: duration_s: must be at most 10 ([redacted])');
+  const job = await request('/api/jobs/media_test');
+  assert.equal(job.status, 503);
+  assert.match(job.data.message, /^Pika trenutačno ne može obraditi zahtjev/);
+});
+
+test('API responses carry security headers and never cache', async t => {
+  const { request } = await setup(t);
+  const r = await request('/api/health');
+  assert.equal(r.headers.get('cache-control'), 'no-store');
+  assert.equal(r.headers.get('x-frame-options'), 'DENY');
+  assert.match(r.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.equal(r.headers.get('referrer-policy'), 'same-origin');
 });
 
 test('reference upload uses exact signed headers and never forwards the key to storage', async t => {
