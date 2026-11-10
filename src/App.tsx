@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import type { ComponentType, ReactNode } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -39,12 +39,71 @@ import {
   AlertCircle,
   RefreshCw,
 } from "lucide-react";
-import Studio from "./Studio";
-import Library from "./Library";
+// Studio and library code load on demand, but their styles stay in the main
+// stylesheet in the original cascade order (before command-menu.css).
+import "./studio.css";
+import "./model-picker.css";
+import "./reference-upload.css";
+import "./library.css";
 import CommandMenu from "./CommandMenu";
 import type { CommandAction } from "./CommandMenu";
+import { isActiveStatus, isTerminalStatus } from "./lib/media.ts";
+import {
+  availableBalanceMicro,
+  formatUsd,
+  isPostpaidBalance,
+  startingPrice,
+} from "./lib/pricing.ts";
+import { mergeHistory } from "./lib/history.ts";
+import { categoryLabel, functionLabel } from "./lib/catalog.ts";
+import type { HistoryJob } from "./lib/history.ts";
+
+const CHUNK_RELOAD_KEY = "hf-chunk-reload";
+// After a new deployment an open tab may request a chunk that no longer
+// exists. Reload once to fetch the current app instead of showing an error.
+function lazyView<T extends ComponentType<any>>(
+  load: () => Promise<{ default: T }>,
+) {
+  return lazy(() =>
+    load()
+      .then((module) => {
+        try {
+          sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+        } catch {}
+        return module;
+      })
+      .catch((error) => {
+        if (!navigator.onLine) throw error;
+        let reloaded = true;
+        try {
+          reloaded = sessionStorage.getItem(CHUNK_RELOAD_KEY) === "1";
+          if (!reloaded) sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
+        } catch {}
+        if (reloaded) throw error;
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }),
+  );
+}
+const loadStudio = () => import("./Studio");
+const loadLibrary = () => import("./Library");
+const Studio = lazyView(loadStudio);
+const Library = lazyView(loadLibrary);
 
 type View = "explore" | "studio" | "creations" | "saved" | "models";
+const VIEW_TITLES: Record<View, string> = {
+  explore: "Higgsfield Studio — Ideje u pokretu",
+  studio: "Studio · Higgsfield Studio",
+  creations: "Moje kreacije · Higgsfield Studio",
+  saved: "Spremljeno · Higgsfield Studio",
+  models: "Svi modeli · Higgsfield Studio",
+};
+type BalanceInfo = { micro: number; postpaid: boolean };
+function balanceInfo(balance: unknown): BalanceInfo | null {
+  const micro = availableBalanceMicro(balance);
+  return micro === null ? null : { micro, postpaid: isPostpaidBalance(balance) };
+}
+type ToastAction = { label: string; run: () => void };
 type Idea = {
   id: string;
   title: string;
@@ -224,6 +283,11 @@ function stored<T>(key: string, fallback: T): T {
     return fallback;
   }
 }
+function withTimeout(signal: AbortSignal, ms: number) {
+  return typeof AbortSignal.any === "function"
+    ? AbortSignal.any([signal, AbortSignal.timeout(ms)])
+    : signal;
+}
 async function api(path: string, options?: RequestInit) {
   let res: Response;
   try {
@@ -266,6 +330,14 @@ async function api(path: string, options?: RequestInit) {
     throw Object.assign(new Error(message), { status: res.status });
   }
   return data;
+}
+function ViewLoading({ label }: { label: string }) {
+  return (
+    <div className="view-loading" role="status">
+      <LoaderCircle className="spin" size={22} />
+      <span>{label}</span>
+    </div>
+  );
 }
 function Brand() {
   return (
@@ -399,10 +471,16 @@ export default function App() {
   const [toastTone, setToastTone] = useState<"success" | "error" | "info">(
     "success",
   );
+  const [toastAction, setToastAction] = useState<ToastAction | null>(null);
   const notify = useCallback(
-    (message: string, tone: "success" | "error" | "info" = "success") => {
+    (
+      message: string,
+      tone: "success" | "error" | "info" = "success",
+      action: ToastAction | null = null,
+    ) => {
       setToastTone(tone);
       setToast(message);
+      setToastAction(action);
     },
     [],
   );
@@ -436,8 +514,20 @@ export default function App() {
   const [catalogRetry, setCatalogRetry] = useState(0);
   const [showKey, setShowKey] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [balance, setBalance] = useState<number | null>(null);
+  const [balance, setBalance] = useState<BalanceInfo | null>(null);
   const modalFocusRef = useRef<HTMLButtonElement>(null);
+  const jobsRef = useRef(jobs);
+  jobsRef.current = jobs;
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  // The studio polls the job it shows; background tracking skips that one.
+  const studioJobId = useRef<string | null>(null);
+  const notifiedJobIds = useRef(new Set<string>());
+  const [unseenFinished, setUnseenFinished] = useState(0);
+  const [focusJobId, setFocusJobId] = useState<string | null>(null);
+  const [trackingPaused, setTrackingPaused] = useState(false);
+  const [trackingRetry, setTrackingRetry] = useState(0);
+  const activeJobs = jobs.filter((job) => isActiveStatus(job.status)).length;
   const [deletedGenerationIds] = useState<string[]>(() => {
     try {
       const value = JSON.parse(
@@ -462,11 +552,7 @@ export default function App() {
       if (typeof data.connected !== "boolean")
         throw new Error("Status veze nije moguće provjeriti. Pokušaj ponovno.");
       setConnected(data.connected);
-      setBalance(
-        typeof data.balance?.balance_micro_usd === "number"
-          ? data.balance.balance_micro_usd / 1000000
-          : null,
-      );
+      setBalance(data.connected ? balanceInfo(data.balance) : null);
       setSessionStatus("ready");
     } catch (error) {
       if (attempt !== sessionAttempt.current) return;
@@ -489,6 +575,50 @@ export default function App() {
   useEffect(() => {
     if (connectOpen && connected) void checkSession();
   }, [connectOpen, checkSession]);
+  // Quietly re-reads the balance (e.g. after a charge) without a loading state.
+  const refreshBalance = useCallback(async () => {
+    const attempt = sessionAttempt.current;
+    try {
+      const data = await api("/api/session");
+      // Connecting, disconnecting, or a full session check supersedes this.
+      if (attempt !== sessionAttempt.current) return;
+      if (data.connected === true) setBalance(balanceInfo(data.balance));
+      else if (data.connected === false) {
+        setConnected(false);
+        setBalance(null);
+      }
+    } catch {
+      /* The last known balance stays visible; the server re-checks funds. */
+    }
+  }, []);
+  useEffect(() => {
+    const seen = () => {
+      if (document.visibilityState === "visible") setUnseenFinished(0);
+    };
+    document.addEventListener("visibilitychange", seen);
+    return () => document.removeEventListener("visibilitychange", seen);
+  }, []);
+  useEffect(() => {
+    document.title =
+      unseenFinished > 0
+        ? `✓ Gotovo${unseenFinished > 1 ? ` (${unseenFinished})` : ""} · Higgsfield Studio`
+        : activeJobs > 0
+          ? `● U izradi (${activeJobs}) · ${VIEW_TITLES[view]}`
+          : VIEW_TITLES[view];
+  }, [view, activeJobs, unseenFinished]);
+  useEffect(() => {
+    // Warm the on-demand views once the first screen is idle.
+    const warm = () => {
+      void loadStudio().catch(() => {});
+      void loadLibrary().catch(() => {});
+    };
+    if ("requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(warm, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const timer = setTimeout(warm, 2500);
+    return () => clearTimeout(timer);
+  }, []);
   useEffect(() => {
     const disconnected = () => setOnline(false);
     const restored = () => {
@@ -578,10 +708,10 @@ export default function App() {
     if (!toast) return;
     const timer = setTimeout(
       () => setToast(""),
-      toastTone === "success" ? 4000 : 8000,
+      toastTone === "success" && !toastAction ? 4000 : 8000,
     );
     return () => clearTimeout(timer);
-  }, [toast, toastTone]);
+  }, [toast, toastTone, toastAction]);
   useEffect(() => {
     if ((view !== "models" && !commandOpen) || catalog.length) return;
     setCatalogLoading(true);
@@ -637,7 +767,7 @@ export default function App() {
       setSessionStatus("ready");
       setSessionError("");
       setConnected(true);
-      setBalance(connection.balance?.balance_micro_usd / 1000000);
+      setBalance(balanceInfo(connection.balance));
       setShowKey(false);
       setKey("");
       setConnectOpen(false);
@@ -662,14 +792,131 @@ export default function App() {
       setConnectError((e as Error).message);
     }
   }
+  function openCreation(id: string) {
+    setFocusJobId(id);
+    navigate("creations");
+  }
+  function jobFinished(job: any) {
+    if (notifiedJobIds.current.has(job.id)) return;
+    notifiedJobIds.current.add(job.id);
+    void refreshBalance();
+    const completed = job.status === "completed";
+    const title = completed
+      ? "Tvoja kreacija je gotova."
+      : "Generiranje nije uspjelo.";
+    if (document.visibilityState === "hidden") {
+      setUnseenFinished((count) => count + 1);
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          const subject =
+            (typeof job.prompt === "string" && job.prompt.trim()) ||
+            job.model ||
+            "AI kreacija";
+          const notification = new Notification(title, {
+            body: String(subject).slice(0, 140),
+            icon: "/favicon.svg",
+            tag: `job-${job.id}`,
+          });
+          notification.onclick = () => {
+            window.focus();
+            openCreation(job.id);
+            notification.close();
+          };
+        } catch {
+          /* Some mobile browsers only allow service-worker notifications. */
+        }
+      }
+    }
+    // The studio preview already shows the job it is following.
+    if (viewRef.current === "studio" && studioJobId.current === job.id) return;
+    notify(
+      completed
+        ? `${title} Rezultat te čeka u tvojim kreacijama.`
+        : `${title} Detalje provjeri u svojim kreacijama.`,
+      completed ? "success" : "error",
+      { label: "Pogledaj", run: () => openCreation(job.id) },
+    );
+  }
   function jobCreated(job: any) {
-    if (deletedJobIds.current.has(job.id)) return;
+    if (!job?.id || deletedJobIds.current.has(job.id)) return;
+    const previous = jobsRef.current.find((j) => j.id === job.id);
+    if (
+      previous &&
+      isActiveStatus(previous.status) &&
+      isTerminalStatus(job.status)
+    )
+      jobFinished({ ...previous, ...job });
     setJobs((prev) => {
       const existing = prev.find((j) => j.id === job.id);
       return existing
         ? prev.map((j) => (j.id === job.id ? { ...j, ...job } : j))
         : [job, ...prev].slice(0, 100);
     });
+  }
+  const jobCreatedRef = useRef(jobCreated);
+  jobCreatedRef.current = jobCreated;
+  useEffect(() => {
+    // Follows every unfinished generation, whichever page is open.
+    if (!connected || !activeJobs) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    let failures = 0;
+    let nextIndex = 0;
+    const controller = new AbortController();
+    const started = Date.now();
+    setTrackingPaused(false);
+    const poll = async () => {
+      if (!alive) return;
+      const active = jobsRef.current.filter(
+        (job) => isActiveStatus(job.status) && job.id !== studioJobId.current,
+      );
+      if (active.length) {
+        const batch = Array.from(
+          { length: Math.min(12, active.length) },
+          (_, index) => active[(nextIndex + index) % active.length],
+        );
+        nextIndex = (nextIndex + batch.length) % active.length;
+        const settled = await Promise.allSettled(
+          batch.map((job) =>
+            api(`/api/jobs/${encodeURIComponent(job.id)}`, {
+              signal: withTimeout(controller.signal, 20000),
+            }),
+          ),
+        );
+        if (!alive) return;
+        settled.forEach((result, index) => {
+          if (result.status === "fulfilled")
+            jobCreatedRef.current({ ...result.value, id: batch[index].id });
+        });
+        failures = settled.every((result) => result.status === "rejected")
+          ? failures + 1
+          : 0;
+      }
+      if (failures >= 3 || Date.now() - started > 20 * 60 * 1000) {
+        setTrackingPaused(true);
+        return;
+      }
+      timer = setTimeout(poll, 6000);
+    };
+    timer = setTimeout(poll, 1200);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [connected, activeJobs > 0, trackingRetry]);
+  function importHistory(imported: HistoryJob[]) {
+    const result = mergeHistory(jobsRef.current as HistoryJob[], imported);
+    // An explicit import restores entries removed earlier in this tab.
+    for (const job of imported) deletedJobIds.current.delete(job.id);
+    try {
+      sessionStorage.setItem(
+        "hf-deleted-generations",
+        JSON.stringify([...deletedJobIds.current].slice(-200)),
+      );
+    } catch {}
+    setJobs(result.jobs);
+    return result;
   }
   const filtered = ideas.filter(
     (i) =>
@@ -765,7 +1012,13 @@ export default function App() {
     ...catalog.map((model) => ({
       id: `model-${model.api_id}`,
       label: model.name || model.api_id,
-      description: `${model.vendor || ""} · ${model.function || model.category}`,
+      description: [
+        model.vendor,
+        functionLabel(model.function) || categoryLabel(model.category),
+        startingPrice(model.display_pricing)?.label,
+      ]
+        .filter(Boolean)
+        .join(" · "),
       group: "Modeli",
       keywords: model.api_id,
       icon: <Layers3 />,
@@ -1077,9 +1330,7 @@ export default function App() {
               {jobs.length > 0 && (
                 <div className="activity-strip">
                   <span className="activity-symbol">
-                    {jobs.some((job) =>
-                      ["queued", "running"].includes(job.status),
-                    ) ? (
+                    {activeJobs > 0 ? (
                       <LoaderCircle className="spin" size={19} />
                     ) : (
                       <Clapperboard size={19} />
@@ -1087,17 +1338,19 @@ export default function App() {
                   </span>
                   <div>
                     <strong>
-                      {jobs.some((job) =>
-                        ["queued", "running"].includes(job.status),
-                      )
+                      {activeJobs > 0
                         ? "Tvoje ideje su u izradi."
                         : "Tvoja kreativnost već ima priču."}
                     </strong>
                     <span>
-                      {jobs.filter((job) =>
-                        ["queued", "running"].includes(job.status),
-                      ).length > 0
-                        ? `${jobs.filter((job) => ["queued", "running"].includes(job.status)).length} aktivnih zahtjeva · provjeri napredak u biblioteci`
+                      {activeJobs > 0
+                        ? `Aktivni zahtjevi: ${activeJobs} · ${
+                            !connected
+                              ? "poveži ključ za praćenje napretka"
+                              : trackingPaused
+                                ? "provjera je pauzirana, nastavi je u biblioteci"
+                                : "javit ćemo ti kad rezultat bude gotov"
+                          }`
                         : `${jobs.length} spremljenih kreacija · rezultati i njihove postavke na jednom mjestu`}
                     </span>
                   </div>
@@ -1207,7 +1460,13 @@ export default function App() {
                         aria-label={`Isprobaj pokret ${motion.name}`}
                       >
                         <span className="motion-thumb">
-                          <img src={`/images/${motion.image}`} alt="" />
+                          <img
+                            src={`/images/thumbs/${motion.image}`}
+                            alt=""
+                            width={320}
+                            height={240}
+                            decoding="async"
+                          />
                           <span>
                             <motion.icon size={20} />
                           </span>
@@ -1473,15 +1732,23 @@ export default function App() {
           )}
           {studioOpened && (
             <div hidden={view !== "studio"}>
-              <Studio
-                key={studioKey}
-                initialPrompt={prompt}
-                initialApiId={modelId}
-                initialInput={initialInput}
-                connected={connected}
-                onConnect={openConnection}
-                onJobCreated={jobCreated}
-              />
+              <Suspense fallback={<ViewLoading label="Otvaram studio…" />}>
+                <Studio
+                  key={studioKey}
+                  initialPrompt={prompt}
+                  initialApiId={modelId}
+                  initialInput={initialInput}
+                  connected={connected}
+                  active={view === "studio"}
+                  balanceMicro={balance?.micro ?? null}
+                  onConnect={openConnection}
+                  onJobCreated={jobCreated}
+                  onRefreshBalance={refreshBalance}
+                  onTrackingChange={(id) => {
+                    studioJobId.current = id;
+                  }}
+                />
+              </Suspense>
             </div>
           )}
           {view === "models" && (
@@ -1509,7 +1776,7 @@ export default function App() {
                     ["audio", "Audio"],
                     ...[...new Set(catalog.map((m) => m.category))]
                       .filter((c) => !["video", "image", "audio"].includes(c))
-                      .map((c) => [c, c]),
+                      .map((c) => [c, categoryLabel(c)]),
                   ].map(([id, name]) => (
                     <button
                       key={id}
@@ -1569,11 +1836,16 @@ export default function App() {
               {!catalogLoading && (
                 <div className="catalog-count">
                   {shownModels.length} dostupnih alata{" "}
-                  <span>Postavke i cijene prikazuju se u studiju.</span>
+                  <span>
+                    Početne cijene su iz kataloga · točnu cijenu provjeravaš u
+                    studiju.
+                  </span>
                 </div>
               )}
               <div className="models-grid">
-                {shownModels.map((m) => (
+                {shownModels.map((m) => {
+                  const price = startingPrice(m.display_pricing);
+                  return (
                   <button
                     className="model-card"
                     key={m.api_id}
@@ -1602,25 +1874,27 @@ export default function App() {
                         {m.description ||
                           "Odaberi postavke, dodaj svoju ideju i stvori novi rezultat."}
                       </p>
+                      {price && (
+                        <span
+                          className="model-price"
+                          title={
+                            price.partial
+                              ? "Početna cijena glavne stavke iz kataloga. Model naplaćuje i dodatne stavke; točnu cijenu provjeri u studiju."
+                              : "Početna cijena iz kataloga. Točna cijena ovisi o postavkama i provjerava se u studiju."
+                          }
+                        >
+                          {price.label}
+                          {price.partial ? " +" : ""}
+                        </span>
+                      )}
                     </span>
                     <span className="model-card-bottom">
                       <span>{m.vendor || m.api_id.split("/")[0]}</span>
-                      <span>
-                        {(
-                          {
-                            "text-to-video": "Tekst → video",
-                            "image-to-video": "Slika → video",
-                            "text-to-image": "Tekst → slika",
-                            "image-to-image": "Slika → slika",
-                            "text-to-audio": "Tekst → audio",
-                          } as Record<string, string>
-                        )[m.function] ||
-                          m.function ||
-                          "Otvori studio"}
-                      </span>
+                      <span>{functionLabel(m.function) || "Otvori studio"}</span>
                     </span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
               {!catalogLoading && !catalogError && shownModels.length === 0 && (
                 <div className="empty-state">
@@ -1641,9 +1915,15 @@ export default function App() {
             </section>
           )}
           {view === "creations" && (
+            <Suspense fallback={<ViewLoading label="Otvaram tvoje kreacije…" />}>
             <Library
               jobs={jobs}
               connected={connected}
+              trackingPaused={trackingPaused}
+              focusJobId={focusJobId}
+              onFocusHandled={() => setFocusJobId(null)}
+              onResumeTracking={() => setTrackingRetry((value) => value + 1)}
+              onImport={importHistory}
               onConnect={openConnection}
               onCreate={() => openStudio()}
               onUpdate={jobCreated}
@@ -1665,6 +1945,7 @@ export default function App() {
                 notify("Kreacija je uklonjena iz lokalne povijesti.");
               }}
             />
+            </Suspense>
           )}
           <footer className="footer">
             <span>
@@ -1718,10 +1999,14 @@ export default function App() {
                 </div>
                 <Check size={18} />
               </div>
-              {balance !== null && Number.isFinite(balance) && (
+              {balance && (
                 <div className="account-balance">
-                  <span>Stanje Pika računa</span>
-                  <strong>${balance.toFixed(2)}</strong>
+                  <span>
+                    {balance.postpaid
+                      ? "Preostalo u obračunskom razdoblju"
+                      : "Stanje Pika računa"}
+                  </span>
+                  <strong>{formatUsd(balance.micro)}</strong>
                 </div>
               )}
               <button
@@ -1912,7 +2197,18 @@ export default function App() {
           ) : (
             <AlertCircle size={17} />
           )}
-          {toast}
+          <span className="toast-message">{toast}</span>
+          {toastAction && (
+            <button
+              className="toast-action"
+              onClick={() => {
+                setToast("");
+                toastAction.run();
+              }}
+            >
+              {toastAction.label} <ArrowUpRight size={13} />
+            </button>
+          )}
           <button
             className="icon-button"
             aria-label="Zatvori obavijest"

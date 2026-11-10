@@ -24,10 +24,15 @@ import {
   Save,
   Trash2,
   Pencil,
+  Bell,
+  BellRing,
 } from "lucide-react";
-import "./studio.css";
 import ModelPicker from "./ModelPicker";
 import ReferenceUpload from "./ReferenceUpload";
+import { isTerminalStatus, mediaKind, mediaUrls } from "./lib/media.ts";
+import { formatUsd } from "./lib/pricing.ts";
+import { prepareReferenceFile } from "./lib/reference.ts";
+import { categoryLabel } from "./lib/catalog.ts";
 
 type Json = Record<string, any>;
 type Model = {
@@ -37,14 +42,22 @@ type Model = {
   function?: string;
   vendor: string;
   input_schema?: Json;
+  display_pricing?: unknown;
 };
 type Props = {
   initialPrompt?: string;
   initialApiId?: string;
   initialInput?: Record<string, unknown>;
   connected: boolean;
+  /** True while the studio is the visible page (enables image paste). */
+  active?: boolean;
+  /** Spendable balance in micro-USD, when known. */
+  balanceMicro?: number | null;
   onConnect: () => void;
   onJobCreated: (job: any) => void;
+  onRefreshBalance?: () => Promise<void> | void;
+  /** Reports the job this studio is polling, so others can skip it. */
+  onTrackingChange?: (jobId: string | null) => void;
 };
 const labels: Record<string, string> = {
   prompt: "Tvoja ideja",
@@ -165,82 +178,6 @@ function ReferencePreview({
   );
 }
 
-const terminal = ["completed", "failed", "cancelled", "canceled"];
-export function mediaUrls(output: any): { url: string; type: string }[] {
-  const found: { url: string; type: string }[] = [];
-  const hints: Record<string, string> = {
-    video: "video",
-    videos: "video",
-    image: "image",
-    images: "image",
-    audio: "audio",
-    stems: "audio",
-    archive: "application/zip",
-    transcript: "text/plain",
-    subtitle: "text/vtt",
-    subtitles: "text/vtt",
-  };
-  const visit = (item: any, hint = "") => {
-    if (!item) return;
-    if (typeof item === "string" && /^https?:\/\//i.test(item)) {
-      if (!found.some((f) => f.url === item))
-        found.push({ url: item, type: hint });
-      return;
-    }
-    if (Array.isArray(item)) {
-      item.forEach((value) => visit(value, hint));
-      return;
-    }
-    if (typeof item === "object")
-      Object.entries(item).forEach(([key, value]) => {
-        if (
-          [
-            "url",
-            "download_url",
-            "video",
-            "videos",
-            "image",
-            "images",
-            "audio",
-            "output",
-            "files",
-            "content",
-            "archive",
-            "transcript",
-            "subtitle",
-            "subtitles",
-            "stems",
-          ].includes(key)
-        )
-          visit(
-            value,
-            key === "url" || key === "download_url"
-              ? item.content_type || hint || item.media_type
-              : hints[key] || item.media_type || hint,
-          );
-      });
-  };
-  visit(output);
-  return found;
-}
-export function mediaKind(item: {
-  url: string;
-  type: string;
-}): "image" | "video" | "audio" | "file" {
-  if (
-    /image/.test(item.type) ||
-    /\.(png|jpe?g|webp|avif|gif)(\?|$)/i.test(item.url)
-  )
-    return "image";
-  if (
-    /audio/.test(item.type) ||
-    /\.(mp3|wav|m4a|ogg|flac)(\?|$)/i.test(item.url)
-  )
-    return "audio";
-  if (/video/.test(item.type) || /\.(mp4|webm|mov)(\?|$)/i.test(item.url))
-    return "video";
-  return "file";
-}
 type PendingGeneration = {
   fingerprint: string;
   id: string;
@@ -515,8 +452,12 @@ export default function Studio({
   initialApiId,
   initialInput,
   connected,
+  active = true,
+  balanceMicro = null,
   onConnect,
   onJobCreated,
+  onRefreshBalance,
+  onTrackingChange,
 }: Props) {
   const [restoredGeneration] = useState(() =>
     !initialInput && !initialPrompt && !initialApiId
@@ -743,7 +684,7 @@ export default function Studio({
   }, [apiId, detail, detailLoading, input, complex, job]);
 
   useEffect(() => {
-    if (!job?.id || terminal.includes(job.status) || !connected) return;
+    if (!job?.id || isTerminalStatus(job.status) || !connected) return;
     let alive = true;
     let timer: ReturnType<typeof setTimeout>;
     const started = Date.now();
@@ -757,7 +698,7 @@ export default function Studio({
         setJob(update);
         saveActive(update, metadata.current, identity.current.id);
         callback.current({ ...update, ...metadata.current });
-        if (terminal.includes(update.status)) return;
+        if (isTerminalStatus(update.status)) return;
       } catch (e: any) {
         if (!alive) return;
         failures++;
@@ -787,8 +728,41 @@ export default function Studio({
   const fields = Object.entries(schema.properties || {}).sort(([a], [b]) =>
     a === "prompt" ? -1 : b === "prompt" ? 1 : 0,
   );
-  const isRunning = job && !terminal.includes(job.status);
+  const isRunning = !!job && !isTerminalStatus(job.status);
   const controlsLocked = !!busy || !!uploading || !!job || recoveryBusy;
+  const trackingChange = useRef(onTrackingChange);
+  trackingChange.current = onTrackingChange;
+  useEffect(() => {
+    trackingChange.current?.(
+      job?.id && isRunning && connected && !pollPaused ? job.id : null,
+    );
+  }, [job?.id, isRunning, connected, pollPaused]);
+  useEffect(() => () => trackingChange.current?.(null), []);
+  const [notifyPermission, setNotifyPermission] = useState<string>(() =>
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+  );
+  const [balanceRefreshing, setBalanceRefreshing] = useState(false);
+  const refreshBalance = async () => {
+    if (!onRefreshBalance || balanceRefreshing) return;
+    setBalanceRefreshing(true);
+    try {
+      await onRefreshBalance();
+    } finally {
+      setBalanceRefreshing(false);
+    }
+  };
+  const insufficientFunds =
+    !!quote &&
+    connected &&
+    typeof balanceMicro === "number" &&
+    Number.isSafeInteger(quote.micro_usd) &&
+    quote.micro_usd > balanceMicro;
+  const pageRef = useRef<HTMLDivElement>(null);
+  const focusReturn = useRef<HTMLElement | null>(null);
+  const quoteShownAt = useRef(0);
+  useEffect(() => {
+    quoteShownAt.current = quote ? Date.now() : 0;
+  }, [quote]);
   const [clock, setClock] = useState(Date.now);
   useEffect(() => {
     if (!isRunning) return;
@@ -828,6 +802,24 @@ export default function Studio({
     saveActive(result, record.metadata, record.id);
     callback.current({ ...result, ...record.metadata });
     setPollPaused(false);
+    // Accepted jobs may reserve funds; keep the visible balance current.
+    void onRefreshBalance?.();
+  };
+  // Frees the studio for a new idea; the app keeps following this job.
+  const detachJob = () => {
+    if (!job) return;
+    try {
+      if (activeGeneration()?.job.id === job.id)
+        sessionStorage.removeItem("hf-active-generation");
+    } catch {}
+    setJob(null);
+    setQuote(null);
+    setPollPaused(false);
+    identity.current = { fingerprint: "", id: "" };
+    metadata.current = {};
+    setRecoveryNotice(
+      "Kreacija se nastavlja u pozadini. Javit ćemo ti kad bude gotova, a rezultat će čekati u tvojim kreacijama.",
+    );
   };
   const recover = async () => {
     if (!pending || recoveryBusy) return;
@@ -1177,22 +1169,90 @@ export default function Studio({
       ) || models.find((model) => model.category === value);
     if (choice) setApiId(choice.api_id);
   };
-  const field = ([key, raw]: [string, unknown]) => {
-    const definition = resolveSchema(raw as Json, schema);
-    const required = schema.required?.includes(key);
-    const isComplex = Object.hasOwn(complex, key);
+  const mediaField = (key: string, definition: Json) => {
     const mediaKinds =
       definition.media_kinds || definition.items?.media_kinds || [];
     const media =
       mediaKinds.length > 0 ||
       (/image|video|audio|reference|frame/.test(key) &&
         (key.includes("url") || definition.format === "uri"));
-    const acceptedMedia =
+    const accept =
       mediaKinds.includes("video") || /video/.test(key)
         ? "video/*"
         : mediaKinds.includes("audio") || /audio/.test(key)
           ? "audio/*"
           : "image/*";
+    return { media, accept };
+  };
+  const pasteFiles = (files: File[]) => {
+    if (!detail || detailLoading || controlsLocked) {
+      setError(
+        "Pričekaj da studio bude spreman, zatim ponovno zalijepi datoteku.",
+      );
+      return;
+    }
+    if (files.length !== 1) {
+      setError(
+        "Zalijepi jednu datoteku. Više referenci možeš dodati jednu po jednu.",
+      );
+      return;
+    }
+    const targets = Object.entries(schema.properties || {})
+      .map(([key, raw]) => ({
+        key,
+        ...mediaField(key, resolveSchema(raw as Json, schema)),
+        filled:
+          !Object.hasOwn(complex, key) &&
+          typeof input[key] === "string" &&
+          !!input[key].trim(),
+      }))
+      .filter((target) => target.media);
+    if (!targets.length) {
+      setError(
+        "Odabrani model ne prima referentne datoteke. Odaberi model koji koristi sliku, video ili audio.",
+      );
+      return;
+    }
+    // Fill an empty matching field first; otherwise replace the first match.
+    let firstError = "";
+    for (const target of [
+      ...targets.filter((target) => !target.filled),
+      ...targets.filter((target) => target.filled),
+    ]) {
+      const prepared = prepareReferenceFile(files[0], target.accept);
+      if (prepared.file) {
+        void upload(target.key, prepared.file);
+        return;
+      }
+      firstError ||= prepared.error;
+    }
+    setError(firstError);
+  };
+  const pasteRef = useRef(pasteFiles);
+  pasteRef.current = pasteFiles;
+  useEffect(() => {
+    if (!active) return;
+    const onPaste = (event: ClipboardEvent) => {
+      const files = Array.from(event.clipboardData?.files || []);
+      if (!files.length || document.querySelector('[role="dialog"]')) return;
+      const target = event.target instanceof Element ? event.target : null;
+      // Keep normal text pasting inside fields untouched.
+      if (
+        target?.closest("input, textarea, [contenteditable='true']") &&
+        event.clipboardData?.types.includes("text/plain")
+      )
+        return;
+      event.preventDefault();
+      pasteRef.current(files);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [active]);
+  const field = ([key, raw]: [string, unknown]) => {
+    const definition = resolveSchema(raw as Json, schema);
+    const required = schema.required?.includes(key);
+    const isComplex = Object.hasOwn(complex, key);
+    const { media, accept: acceptedMedia } = mediaField(key, definition);
     const id = `studio-field-${key}`;
     let references: string[] = [];
     if (media) {
@@ -1408,6 +1468,7 @@ export default function Studio({
             accept={acceptedMedia}
             disabled={controlsLocked}
             uploading={uploading === key}
+            pasteHint={active && acceptedMedia === "image/*"}
             onFile={(file) => void upload(key, file)}
           />
         )}
@@ -1420,6 +1481,62 @@ export default function Studio({
       </div>
     );
   };
+  const actionDisabled =
+    !!busy ||
+    !!uploading ||
+    loading ||
+    detailLoading ||
+    !detail ||
+    requiredMissing.length > 0 ||
+    !!pending ||
+    recoveryBusy ||
+    !!job ||
+    insufficientFunds;
+  const runPrimaryAction = () => {
+    // Fields are disabled while busy; remember where to return focus.
+    const focused = document.activeElement;
+    focusReturn.current =
+      focused instanceof HTMLElement && focused !== document.body
+        ? focused
+        : null;
+    void (quote ? generate() : price());
+  };
+  const shortcutKey = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
+  const shortcut = useRef<(event: KeyboardEvent) => void>(() => {});
+  shortcut.current = (event) => {
+    if (
+      event.key !== "Enter" ||
+      !(event.metaKey || event.ctrlKey) ||
+      event.isComposing ||
+      event.defaultPrevented ||
+      document.querySelector('[role="dialog"]')
+    )
+      return;
+    const target = event.target instanceof Node ? event.target : null;
+    if (target !== document.body && !pageRef.current?.contains(target)) return;
+    event.preventDefault();
+    if (actionDisabled) return;
+    // A paid submit needs a deliberate second press after the price appears.
+    if (quote && Date.now() - quoteShownAt.current < 700) return;
+    runPrimaryAction();
+  };
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (event: KeyboardEvent) => shortcut.current(event);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [active]);
+  useEffect(() => {
+    if (busy) return;
+    const element = focusReturn.current;
+    focusReturn.current = null;
+    if (
+      element?.isConnected &&
+      document.activeElement === document.body &&
+      !element.matches(":disabled")
+    )
+      element.focus({ preventScroll: true });
+  }, [busy]);
   const mainFields = fields.filter(
     ([key]) => !["seed", "negative_prompt", "guidance_scale"].includes(key),
   );
@@ -1440,7 +1557,7 @@ export default function Studio({
     category === "image" ? "sliku" : category === "video" ? "video" : "sadržaj";
 
   return (
-    <div className="studio-page">
+    <div className="studio-page" ref={pageRef}>
       <div className="studio-title">
         <div>
           <div className="studio-eyebrow">
@@ -1513,7 +1630,7 @@ export default function Studio({
             Oporavak šalje izvorne postavke s istim ID-jem. Ako prvi zahtjev
             nije zaprimljen, pokrenut će generiranje
             {pending.maxCostMicroUsd !== undefined
-              ? ` po potvrđenoj cijeni do $${(pending.maxCostMicroUsd / 1000000).toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}`
+              ? ` po potvrđenoj cijeni do ${formatUsd(pending.maxCostMicroUsd)}`
               : ""}
             . Novi zahtjevi ostaju pauzirani do provjere.
           </p>
@@ -1678,7 +1795,7 @@ export default function Studio({
                   )
                   .map((value) => (
                     <option key={value} value={value}>
-                      {value}
+                      {categoryLabel(value)}
                     </option>
                   ))}
               </select>
@@ -1936,34 +2053,65 @@ export default function Studio({
               </div>
             )}
             {quote && (
-              <div className="studio-quote" role="status">
+              <div
+                className={`studio-quote ${insufficientFunds ? "is-short" : ""}`}
+                role="status"
+              >
                 <div>
-                  <Check size={15} />
+                  {insufficientFunds ? (
+                    <AlertTriangle size={15} />
+                  ) : (
+                    <Check size={15} />
+                  )}
                   <span>Procijenjena cijena</span>
                 </div>
-                <strong>
-                  $
-                  {Number(quote.sell_usd ?? quote.micro_usd / 1000000)
-                    .toFixed(4)
-                    .replace(/0+$/, "")
-                    .replace(/\.$/, "")}
-                </strong>
+                <strong>{formatUsd(quote.micro_usd)}</strong>
+              </div>
+            )}
+            {quote && connected && typeof balanceMicro === "number" && (
+              <div
+                className={`studio-balance ${insufficientFunds ? "is-short" : ""}`}
+                role={insufficientFunds ? "alert" : undefined}
+              >
+                {insufficientFunds ? (
+                  <span>
+                    Stanje računa ({formatUsd(balanceMicro)}) nije dovoljno za
+                    ovo generiranje.
+                  </span>
+                ) : (
+                  <span>
+                    Stanje računa <b>{formatUsd(balanceMicro)}</b>
+                    <i>·</i> nakon generiranja ≈{" "}
+                    {formatUsd(balanceMicro - quote.micro_usd)}
+                  </span>
+                )}
+                <div>
+                  {insufficientFunds && (
+                    <a href="https://dev.pika.art" target="_blank" rel="noreferrer">
+                      Nadoplati sredstva <ArrowUpRight size={12} />
+                    </a>
+                  )}
+                  {onRefreshBalance && (
+                    <button
+                      type="button"
+                      disabled={balanceRefreshing}
+                      onClick={() => void refreshBalance()}
+                    >
+                      {balanceRefreshing ? (
+                        <LoaderCircle className="studio-spin" size={12} />
+                      ) : (
+                        <RefreshCw size={12} />
+                      )}{" "}
+                      Osvježi stanje
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             <button
               className="studio-generate"
-              disabled={
-                !!busy ||
-                !!uploading ||
-                loading ||
-                detailLoading ||
-                !detail ||
-                requiredMissing.length > 0 ||
-                !!pending ||
-                recoveryBusy ||
-                !!job
-              }
-              onClick={() => void (quote ? generate() : price())}
+              disabled={actionDisabled}
+              onClick={runPrimaryAction}
             >
               {busy ? (
                 <LoaderCircle className="studio-spin" size={18} />
@@ -1980,17 +2128,24 @@ export default function Studio({
                       ? "Generiranje je u tijeku"
                       : job
                         ? "Započni novu kreaciju u pregledu"
-                        : quote
-                          ? connected
-                            ? `Generiraj ${mediaLabel}`
-                            : "Poveži ključ i generiraj"
-                          : "Provjeri cijenu"}
+                        : insufficientFunds
+                          ? "Nedovoljno sredstava na računu"
+                          : quote
+                            ? connected
+                              ? `Generiraj ${mediaLabel}`
+                              : "Poveži ključ i generiraj"
+                            : "Provjeri cijenu"}
               <ArrowUpRight size={17} />
             </button>
             <p className="studio-cost-note">
               {quote
                 ? "Jedna generacija · naplata s tvog Pika računa"
                 : "Provjera cijene je besplatna. Ti odlučuješ kada počinje generiranje."}
+              {!actionDisabled && (
+                <span className="studio-shortcut">
+                  <kbd>{shortcutKey}</kbd>+<kbd>Enter</kbd>
+                </span>
+              )}
             </p>
           </div>
         </section>
@@ -2002,7 +2157,7 @@ export default function Studio({
             </span>
             <span className="studio-preview-tag" role="status">
               {job
-                ? terminal.includes(job.status)
+                ? isTerminalStatus(job.status)
                   ? job.status === "completed"
                     ? "GOTOVO"
                     : "NEUSPJELO"
@@ -2097,6 +2252,32 @@ export default function Studio({
                   <RefreshCw size={15} />
                   Nastavi provjeru
                 </button>
+              )}
+              {connected && (
+                <button className="studio-secondary" onClick={detachJob}>
+                  <Plus size={15} />
+                  Pripremi novu ideju dok čekaš
+                </button>
+              )}
+              {connected && notifyPermission === "default" && (
+                <button
+                  className="studio-notify"
+                  onClick={async () => {
+                    try {
+                      setNotifyPermission(await Notification.requestPermission());
+                    } catch {
+                      setNotifyPermission("denied");
+                    }
+                  }}
+                >
+                  <Bell size={14} /> Obavijesti me kad završi
+                </button>
+              )}
+              {connected && notifyPermission === "granted" && (
+                <span className="studio-notify-on">
+                  <BellRing size={12} /> Javit ćemo ti i kad si u drugoj
+                  kartici
+                </span>
               )}
               {restoredGeneration?.job.id === job.id && (
                 <span className="studio-restored-job">

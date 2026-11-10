@@ -26,6 +26,8 @@ Produkcijska aplikacija dostupna je na portu `3001` (ili `PORT`). HTTPS reverse 
 
 Repozitorij sadrži `vercel.json` i Node ulaznu točku `api/index.js`. Vercel gradi Vite frontend u `dist/`, poslužuje statičke datoteke preko CDN-a i usmjerava `/api/*` prema Express funkciji. Odaberi Node.js 24 i postavi `SESSION_SECRET` kao osjetljivu serversku varijablu za Production i Preview prije prve objave. Korisnikov Pika ključ unosi se u aplikaciji; nije varijabla projekta.
 
+`vercel.json` i Express poslužitelj šalju ista sigurnosna zaglavlja (CSP, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`); test provjerava da su usklađena. Datoteke u `dist/assets/` imaju hash u nazivu pa se trajno spremaju u predmemoriju, a nepostojeći chunk vraća 404 umjesto HTML-a. Otvorena kartica nakon nove objave jednom se automatski osvježi ako zatraži stari chunk.
+
 Prijenos referentnih datoteka koristi mali autorizirani zahtjev za potpis, a zatim preglednik izravno šalje datoteku na Pika spremište. Tako datoteke do 20 MB za slike/audio i 50 MB za video ne prolaze kroz Vercelovo ograničenje veličine zahtjeva. Ako spremište ne dopušta CORS za domenu aplikacije, korisnik može unijeti javni URL reference; stvarni upload treba provjeriti s važećim Pika ključem.
 
 ## Implementirano
@@ -48,6 +50,12 @@ Prijenos referentnih datoteka koristi mali autorizirani zahtjev za potpis, a zat
 - Povlačenje i ispuštanje referentnih datoteka uz provjeru formata, veličine i broja datoteka prije prijenosa.
 - Jasan prikaz nedostupne veze i pokušaj ponovne provjere sesije; oporavak prikaza nakon neočekivane greške ne briše lokalne podatke.
 - Oštećen ili istekao pregled rezultata ima radnju osvježavanja istog zahtjeva; detalji podržavaju veći pregled i kopiranje ID-ja za podršku.
+- Početne cijene iz kataloga (npr. „od $0.04 / s”) prikazuju se na karticama modela, u brzoj pretrazi i pri odabiru modela; točna cijena i dalje se provjerava prije generiranja.
+- Uz procijenjenu cijenu studio prikazuje stanje računa (uključujući postpaid razdoblje) i iznos nakon generiranja. Ako sredstva nisu dovoljna, generiranje je onemogućeno uz poveznicu za nadoplatu i osvježavanje stanja.
+- Generiranja se prate u pozadini na svakoj stranici. Tijekom čekanja studio se može osloboditi za novu ideju, a po završetku stiže obavijest s izravnim otvaranjem rezultata. Naslov kartice pokazuje aktivne i dovršene zahtjeve; obavijesti preglednika su opcionalne.
+- `Ctrl/⌘ + Enter` provjerava cijenu, a ponovni namjerni pritisak pokreće generiranje. Sliku je moguće zalijepiti (`Ctrl/⌘ + V`) izravno u referentno polje odabranog modela.
+- Povijest kreacija može se izvesti u JSON sigurnosnu kopiju i uvesti na drugom uređaju; uvoz preskače duplikate i nikad ne sadrži API ključ.
+- Studio i biblioteka učitavaju se na zahtjev (manji početni JavaScript), a sličice pokreta kamere koriste male verzije fotografija.
 
 Galerijske fotografije služe kao inspiracija, nisu generirani rezultati. Izvori su u `public/images/sources.json`. Ovo je neovisna aplikacija; ne koristi Higgsfield račun ili njihove interne API-je. Dostupne mogućnosti ovise o Pika API Club katalogu, ključu, sredstvima i uvjetima pružatelja. Složena ugniježđena polja pojedinih modela uređuju se kao JSON.
 
@@ -58,7 +66,7 @@ npm test
 npm run build
 ```
 
-Backend testovi koriste mock odgovore i ne troše sredstva. Stvarni javni katalog, sheme i izračun cijene provjereni su preko Pika API-ja. Plaćeno generiranje nije testirano stvarnim ključem. Browser smoke testovi nalaze se u `scratch/` i pokreću se uz aktivan dev server i instalirani Playwright Chromium (`npx playwright install chromium`).
+Backend testovi koriste mock odgovore i ne troše sredstva. Testovi u `tests/` pokrivaju čiste pomoćne module iz `src/lib/` (mediji, cijene, katalog, povijest, reference) i pokreću se izravno u Node.js-u bez dodatnih alata. Stvarni javni katalog, sheme i izračun cijene provjereni su preko Pika API-ja. Plaćeno generiranje nije testirano stvarnim ključem. Browser smoke testovi nalaze se u `scratch/` i pokreću se uz aktivan dev server i instalirani Playwright Chromium (`npx playwright install chromium`).
 
 Produkcija zahtijeva serversku varijablu `SESSION_SECRET`: 64 heksadecimalna znaka dobivena iz 32 kriptografski nasumična bajta. Sve instance moraju koristiti isti secret; nikad ga ne postavljati kao `VITE_` varijablu niti spremati u Git. Promjena secreta završava postojeće sesije. Razvoj bez te varijable koristi privremeni ključ za taj proces.
 

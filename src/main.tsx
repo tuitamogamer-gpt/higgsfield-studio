@@ -6,6 +6,7 @@ import "./index.css";
 import "./polish.css";
 import "./discover.css";
 import "./reliability.css";
+import "./enhancements.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <AppBoundary>

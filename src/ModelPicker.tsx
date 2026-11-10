@@ -1,7 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Layers3, Search, Star, X } from "lucide-react";
-import "./model-picker.css";
+import { startingPrice } from "./lib/pricing.ts";
+import { functionLabel } from "./lib/catalog.ts";
 
 type Model = {
   api_id: string;
@@ -9,6 +10,7 @@ type Model = {
   category: string;
   vendor: string;
   function?: string;
+  display_pricing?: unknown;
 };
 type Props = {
   models: Model[];
@@ -18,16 +20,6 @@ type Props = {
   loading?: boolean;
 };
 const FAVORITES_KEY = "hf-favorite-models";
-const functionLabels: Record<string, string> = {
-  "text-to-video": "Tekst → video",
-  "image-to-video": "Slika → video",
-  "video-to-video": "Video → video",
-  "text-to-image": "Tekst → slika",
-  "image-to-image": "Slika → slika",
-  "text-to-audio": "Tekst → audio",
-  "text-to-speech": "Tekst → govor",
-  "speech-to-text": "Govor → tekst",
-};
 function readFavorites(): string[] {
   try {
     const saved = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
@@ -71,7 +63,7 @@ export default function ModelPicker({
       .filter(
         (model) =>
           (!onlyFavorites || favorites.includes(model.api_id)) &&
-          `${model.name} ${vendorName(model)} ${model.api_id} ${functionLabels[model.function || ""] || ""}`
+          `${model.name} ${vendorName(model)} ${model.api_id} ${functionLabel(model.function)}`
             .toLocaleLowerCase()
             .includes(term),
       )
@@ -193,7 +185,13 @@ export default function ModelPicker({
           </strong>
           <span>
             {selected
-              ? `${vendorName(selected)} · ${functionLabels[selected.function || ""] || selected.function || "AI model"}`
+              ? [
+                  vendorName(selected),
+                  functionLabel(selected.function) || "AI model",
+                  startingPrice(selected.display_pricing)?.label,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
               : "Pronađi pravi model za svoju ideju"}
           </span>
         </span>
@@ -313,11 +311,14 @@ export default function ModelPicker({
                             <span>
                               {vendorName(model)}
                               <i />
-                              {functionLabels[model.function || ""] ||
-                                model.function ||
-                                model.category}
+                              {functionLabel(model.function) || model.category}
                             </span>
                           </span>
+                          {startingPrice(model.display_pricing) && (
+                            <span className="mp-price">
+                              {startingPrice(model.display_pricing)!.label}
+                            </span>
+                          )}
                           {model.api_id === value && (
                             <Check className="mp-selected-check" size={16} />
                           )}
@@ -374,7 +375,7 @@ export default function ModelPicker({
               <div className="mp-footer">
                 <span>
                   {storageNotice ||
-                    "Modeli za odabranu vrstu sadržaja · cijenu provjeravaš prije generiranja."}
+                    "Početne cijene su iz kataloga · točnu cijenu provjeravaš prije generiranja."}
                 </span>
                 <span className="mp-key-hint">
                   <kbd>↑</kbd>

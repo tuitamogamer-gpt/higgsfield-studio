@@ -5,6 +5,7 @@ import {
   Maximize2,
   Minimize2,
   ArrowDownToLine,
+  ArrowUpFromLine,
   ArrowRight,
   ArrowUpRight,
   Check,
@@ -29,13 +30,31 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { mediaKind, mediaUrls } from "./Studio";
-import "./library.css";
+import {
+  isActiveStatus,
+  isFailedStatus,
+  mediaKind,
+  mediaUrls,
+} from "./lib/media.ts";
+import {
+  createHistoryExport,
+  HISTORY_LIMIT,
+  historyFilename,
+  parseHistoryImport,
+} from "./lib/history.ts";
+import type { HistoryJob } from "./lib/history.ts";
 
 type Job = Record<string, any>;
 type Props = {
   jobs: Job[];
   connected: boolean;
+  /** Background status checks are paused (the app follows active jobs). */
+  trackingPaused?: boolean;
+  /** Opens this creation's details, e.g. from a completion notification. */
+  focusJobId?: string | null;
+  onFocusHandled?: () => void;
+  onResumeTracking?: () => void;
+  onImport?: (jobs: HistoryJob[]) => { added: number; dropped: number };
   onConnect: () => void;
   onCreate: () => void;
   onUpdate: (job: Job) => void;
@@ -134,10 +153,8 @@ function inputSettings(job: Job) {
       value !== "",
   );
 }
-const running = (job: Job) =>
-  ["queued", "running", "pending", "processing"].includes(job.status);
-const failed = (job: Job) =>
-  ["failed", "canceled", "cancelled"].includes(job.status);
+const running = (job: Job) => isActiveStatus(job.status);
+const failed = (job: Job) => isFailedStatus(job.status);
 const status = (job: Job) =>
   job.status === "completed"
     ? "Dovršeno"
@@ -365,6 +382,11 @@ function refreshError(error: unknown) {
 export default function Library({
   jobs,
   connected,
+  trackingPaused = false,
+  focusJobId = null,
+  onFocusHandled,
+  onResumeTracking,
+  onImport,
   onConnect,
   onCreate,
   onUpdate,
@@ -405,8 +427,8 @@ export default function Library({
     setExpanded(false);
     setError("");
   }, [selectedId]);
-  const [retry, setRetry] = useState(0);
-  const [paused, setPaused] = useState(false);
+  const [backupNotice, setBackupNotice] = useState("");
+  const importInput = useRef<HTMLInputElement>(null);
   const jobsRef = useRef(jobs);
   jobsRef.current = jobs;
   const callback = useRef(onUpdate);
@@ -449,47 +471,91 @@ export default function Library({
     if (current) callback.current({ ...current, ...result });
   }
 
+  // Active jobs are followed by the app shell, so updates arrive on any page.
   useEffect(() => {
-    if (!connected || !pending.length) return;
-    let alive = true,
-      timer: ReturnType<typeof setTimeout>,
-      failures = 0,
-      nextIndex = 0;
-    const controller = new AbortController();
-    const started = Date.now();
-    setPaused(false);
-    const poll = async () => {
-      const active = jobsRef.current.filter(running);
-      if (!active.length || !alive) return;
-      const batch = Array.from(
-        { length: Math.min(12, active.length) },
-        (_, index) => active[(nextIndex + index) % active.length],
+    if (!focusJobId) return;
+    if (jobsRef.current.some((job) => job.id === focusJobId)) {
+      setDeleteId(null);
+      setSelectedId(focusJobId);
+      setCopied(false);
+    }
+    onFocusHandled?.();
+  }, [focusJobId]);
+
+  const exportHistory = () => {
+    setError("");
+    try {
+      const blob = new Blob(
+        [JSON.stringify(createHistoryExport(jobs), null, 2)],
+        { type: "application/json" },
       );
-      nextIndex = (nextIndex + batch.length) % active.length;
-      const settled = await Promise.allSettled(
-        batch.map((job) =>
-          refresh(
-            job,
-            AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
-          ),
-        ),
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = historyFilename();
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setBackupNotice(
+        `Sigurnosna kopija je preuzeta (${jobs.length} ${new Intl.PluralRules("hr").select(jobs.length) === "few" ? "kreacije" : "kreacija"}). API ključ nije uključen.`,
       );
-      if (!alive) return;
-      if (settled.every((result) => result.status === "rejected")) failures++;
-      else failures = 0;
-      if (failures >= 3 || Date.now() - started > 20 * 60 * 1000) {
-        setPaused(true);
-        return;
-      }
-      timer = setTimeout(poll, 6000);
-    };
-    timer = setTimeout(poll, 1200);
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [connected, pending.length > 0, retry]);
+    } catch {
+      setError("Izvoz povijesti nije uspio. Pokušaj ponovno.");
+    }
+  };
+  const importHistory = async (file?: File) => {
+    if (!file || !onImport) return;
+    setError("");
+    setBackupNotice("");
+    if (file.size > 5_000_000) {
+      setError("Datoteka je prevelika za uvoz povijesti (najviše 5 MB).");
+      return;
+    }
+    try {
+      const result = onImport(parseHistoryImport(await file.text()));
+      setBackupNotice(
+        result.added
+          ? `Uvezeno novih kreacija: ${result.added}.${result.dropped ? ` Najstarije nisu stale u povijest (najviše ${HISTORY_LIMIT}).` : ""}`
+          : result.dropped
+            ? `Nove kreacije su starije od ${HISTORY_LIMIT} spremljenih, pa nisu dodane.`
+            : "Sve kreacije iz datoteke već su u tvojoj povijesti.",
+      );
+    } catch (importError) {
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : "Uvoz povijesti nije uspio. Pokušaj ponovno.",
+      );
+    }
+  };
+  const backupControls = onImport && (
+    <>
+      <input
+        ref={importInput}
+        type="file"
+        accept="application/json,.json"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(event) => {
+          void importHistory(event.currentTarget.files?.[0]);
+          event.currentTarget.value = "";
+        }}
+      />
+      {jobs.length > 0 && (
+        <button className="lib-backup-button" onClick={exportHistory}>
+          <ArrowDownToLine size={14} /> Izvezi povijest
+        </button>
+      )}
+      <button
+        className="lib-backup-button"
+        onClick={() => importInput.current?.click()}
+      >
+        <ArrowUpFromLine size={14} /> Uvezi povijest
+      </button>
+    </>
+  );
 
   const refreshOne = async (job: Job) => {
     if (!connected) {
@@ -639,6 +705,12 @@ export default function Library({
               <b>03</b> Pokreni priču
             </span>
           </div>
+          {backupControls && (
+            <div className="lib-empty-backup">
+              <span>Imaš sigurnosnu kopiju s drugog uređaja?</span>
+              {backupControls}
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -715,7 +787,7 @@ export default function Library({
           </div>
           {pending.length > 0 && (
             <div className="lib-processing-note">
-              {connected && !paused ? (
+              {connected && !trackingPaused ? (
                 <>
                   <LoaderCircle size={14} className="lib-spin" />
                   <span>
@@ -733,7 +805,7 @@ export default function Library({
                   </span>
                   <button
                     onClick={() =>
-                      connected ? setRetry((value) => value + 1) : onConnect()
+                      connected ? onResumeTracking?.() : onConnect()
                     }
                   >
                     {connected ? "Nastavi provjeru" : "Poveži ključ"}{" "}
@@ -906,9 +978,20 @@ export default function Library({
             </div>
           )}
           <div className="lib-storage-note">
-            <ShieldIcon /> Povijest je spremljena u ovom pregledniku. Preuzmi
-            rezultate koje želiš trajno sačuvati.
+            <span>
+              <ShieldIcon /> Povijest je spremljena u ovom pregledniku. Izvezi
+              sigurnosnu kopiju za drugi uređaj, a rezultate preuzmi ako ih
+              želiš trajno sačuvati.
+            </span>
+            {backupControls && (
+              <div className="lib-backup">{backupControls}</div>
+            )}
           </div>
+          {backupNotice && (
+            <p className="lib-backup-notice" role="status">
+              <Check size={13} /> {backupNotice}
+            </p>
+          )}
         </>
       )}
       {selected && (

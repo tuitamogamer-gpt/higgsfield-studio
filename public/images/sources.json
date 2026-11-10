@@ -76,5 +76,29 @@
     "source": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee",
     "description": "Road extending between orange rocky hills",
     "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "thumbs/portrait-editorial.jpg",
+    "source": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1",
+    "description": "320x240 motion-list thumbnail cropped from portrait-editorial.jpg",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "thumbs/cinematic-car.jpg",
+    "source": "https://images.unsplash.com/photo-1503376780353-7e6692767b70",
+    "description": "320x240 motion-list thumbnail cropped from cinematic-car.jpg",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "thumbs/mountain-world.jpg",
+    "source": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+    "description": "320x240 motion-list thumbnail cropped from mountain-world.jpg",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
+  },
+  {
+    "file": "thumbs/cosmic-night.jpg",
+    "source": "https://images.unsplash.com/photo-1462331940025-496dfbfc7564",
+    "description": "320x240 motion-list thumbnail cropped from cosmic-night.jpg",
+    "usage": "Editorial inspiration placeholder photography; not generated sample output"
   }
 ]

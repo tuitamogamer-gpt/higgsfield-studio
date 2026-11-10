@@ -1,0 +1,259 @@
+/* Loading state while an on-demand view downloads. */
+.view-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 320px;
+  color: #9fb08c;
+  font-size: 12px;
+}
+
+/* Toasts can offer one follow-up action. */
+.toast-message {
+  flex: 1;
+  min-width: 0;
+}
+.toast-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.toast-action:hover {
+  background: #ffffff14;
+}
+.toast-action:focus-visible {
+  outline: 2px solid #c6f15c;
+  outline-offset: 2px;
+}
+
+/* Starting prices from the live catalog. */
+.model-body > .model-price {
+  display: inline-flex;
+  align-items: center;
+  margin: -4px 0 16px;
+  padding: 4px 8px;
+  border: 1px solid #3c4a30;
+  border-radius: 999px;
+  background: #1c2416;
+  color: #c9e2a8;
+  font-size: 10px;
+  font-weight: 550;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+.mp-price {
+  flex-shrink: 0;
+  max-width: 42%;
+  padding: 3px 7px;
+  border: 1px solid #3a4630;
+  border-radius: 999px;
+  color: #b9d29a;
+  font-size: 9px;
+  line-height: 1.5;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Balance next to the quote. */
+.studio-quote.is-short {
+  background: linear-gradient(90deg, #33261d, #261c15);
+  border-color: #6e4f36;
+  color: #f0cfa9;
+}
+.studio-quote.is-short strong {
+  color: #ffd9ad;
+}
+.studio-balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 8px;
+  padding: 0 2px;
+  color: #93a385;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.studio-balance b {
+  color: #cfe5b4;
+  font-weight: 600;
+}
+.studio-balance i {
+  margin: 0 6px;
+  font-style: normal;
+  color: #5d6b51;
+}
+.studio-balance > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.studio-balance a,
+.studio-balance button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #c3dca3;
+  font: inherit;
+  font-size: 10px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.studio-balance button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.studio-balance.is-short {
+  color: #efc9a1;
+}
+.studio-balance.is-short a {
+  color: #ffd9ad;
+  font-weight: 600;
+}
+.studio-balance + .studio-generate {
+  margin-top: 12px;
+}
+
+/* Keyboard shortcut hints. */
+.studio-shortcut,
+.ref-upload-paste {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.studio-shortcut {
+  margin-left: 8px;
+  color: #6c7564;
+}
+.studio-shortcut kbd,
+.ref-upload-paste kbd {
+  font-family: inherit;
+  font-size: 8px;
+  border: 1px solid #3b4533;
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: #93a585;
+  background: #1d2419;
+}
+@media (hover: none) {
+  .studio-shortcut,
+  .ref-upload-paste {
+    display: none;
+  }
+}
+
+/* Completion notifications for long generations. */
+.studio-notify {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 14px;
+  padding: 7px 11px;
+  border: 1px dashed #4a5a3a;
+  border-radius: 999px;
+  background: none;
+  color: #b9d29a;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.studio-notify:hover {
+  border-style: solid;
+  color: #d8f0b9;
+}
+.studio-notify-on {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  color: #a5ba8f;
+  font-size: 10px;
+}
+
+/* History backup in the library. */
+.lib-storage-note {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+.lib-storage-note > span {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  flex: 1 1 320px;
+}
+.lib-storage-note > span > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.lib-backup,
+.lib-empty-backup {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lib-empty-backup {
+  justify-content: center;
+  margin-top: 28px;
+  color: #7f8c74;
+  font-size: 10px;
+}
+.lib-backup-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border: 1px solid #34402b;
+  border-radius: 7px;
+  background: #1a2016;
+  color: #c3d6ad;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.lib-backup-button:hover {
+  border-color: #50613e;
+  background: #222b1b;
+  color: #e1f2cc;
+}
+.lib-backup-button:focus-visible {
+  outline: 2px solid #c6f15c;
+  outline-offset: 2px;
+}
+.lib-backup-notice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px 0 0;
+  color: #b4cd97;
+  font-size: 10px;
+  line-height: 1.6;
+}
+@media (max-width: 640px) {
+  .mp-price {
+    display: none;
+  }
+  .lib-storage-note > span {
+    flex-basis: 100%;
+  }
+  .lib-backup-button {
+    min-height: 36px;
+  }
+}
